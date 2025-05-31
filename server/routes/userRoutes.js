@@ -18,16 +18,21 @@ const upload  = multer({ storage })
 router.get('/:phone', async (req, res) => {
     try {
         const { phone } = req.params;
-        const phoneRegex = /^\d{10,}$/;
-
-        if (!phoneRegex.test(phone)) {
-            return res.status(400).json({ message: 'Invalid phone number format' });
-        }
 
         const user = await User.findOne({ phone });
+        const profileImg = user.profileImg ? `${req.protocol}://${req.get('host')}${user.profileImg}`: null;
+
 
         if (user) {
-            return res.status(200).json(user);
+            return res.status(200).json({
+                message: 'User found',
+                user: {
+                    id: user._id,
+                    name: user.name,
+                    phone: user.phone,
+                    profileImg: profileImg
+                }
+            });
         } else {
             return res.status(404).json({ message: 'User not found' });
         }
@@ -43,11 +48,6 @@ router.post('/', upload.single('profile'), async (req, res) => {
 
         if (!name || !phone) {
             return res.status(400).json({ message: 'Name and phone are required' });
-        }
-
-        const phoneRegex = /^\d{10,}$/;
-        if (!phoneRegex.test(phone)) {
-            return res.status(400).json({ message: 'Invalid phone number format' });
         }
 
         const existingUser = await User.findOne({ phone });
@@ -82,7 +82,7 @@ router.post('/', upload.single('profile'), async (req, res) => {
 
 // Update user by id
 
-router.put('/:id', upload.single('profileImg'), async (req, res) => {
+router.put('/:id', upload.single('profile'), async (req, res) => {
     const { name, phone } = req.body;
 
     try {
@@ -91,8 +91,7 @@ router.put('/:id', upload.single('profileImg'), async (req, res) => {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        // Update profile image if new file uploaded
-        if (req.file) {
+         if (req.file) {
             if (user.profileImg) {
                 const oldPath = `.${user.profileImg}`;
                 if (fs.existsSync(oldPath)) {
@@ -102,7 +101,6 @@ router.put('/:id', upload.single('profileImg'), async (req, res) => {
             user.profileImg = `/uploads/${req.file.filename}`;
         }
 
-        // Update name and phone
         if (name) user.name = name;
         if (phone) user.phone = phone;
 

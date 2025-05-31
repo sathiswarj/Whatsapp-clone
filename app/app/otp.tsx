@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 
-export default function otp() {
+export default function Otp() {
     const router = useRouter();
     const { phoneNumber } = useLocalSearchParams();
     const [otp, setOtp] = useState('');
@@ -36,14 +36,15 @@ export default function otp() {
     }
 
 
-    useEffect(() => {
-        generateOtp();
-        const countDown = setInterval(() => {
-            setTimer((prev) => prev > 0 ? prev - 1 : 0);
-            return () => clearInterval(countDown);
-        }, 1000);
+useEffect(() => {
+  generateOtp();
+  const countDown = setInterval(() => {
+    setTimer((prev) => (prev > 0 ? prev - 1 : 0));
+  }, 1000);
 
-    }, [phoneNumber]);
+  return () => clearInterval(countDown);  
+}, [phoneNumber]);
+
 
     return (
         <View className='bg-white flex-1 items-center justify-center px-5'>

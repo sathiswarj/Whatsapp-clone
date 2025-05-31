@@ -2,6 +2,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import path from 'path';
 
 import userRoutes from './routes/userRoutes.js';
 
@@ -9,6 +10,12 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors());
+
+// Serve static files from the 'uploads' directory
+// This allows access to uploaded files via a URL like http://localhost:PORT/uploads/filename.jpg
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+// Load environment variables from .env file
+
 
 dotenv.config();
 
