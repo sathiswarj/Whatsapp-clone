@@ -3,6 +3,8 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import path from 'path';
+import { Server } from 'socket.io';
+import registerSocketHandlers from './socket.js';
 
 import userRoutes from './routes/userRoutes.js';
 
@@ -35,6 +37,17 @@ mongoose
 app.use('/api/users', userRoutes);
 
 
-app.listen(process.env.PORT, () => {
+const server  = app.listen(process.env.PORT, () => {
     console.log(`Server is running on http://localhost:${process.env.PORT}`);
 });
+
+const io  = new Server(server,{
+    cors: {
+        origin: "*",
+        methods:["GET", "POST"]
+    }
+})
+
+registerSocketHandlers(io);
+
+export {io};
