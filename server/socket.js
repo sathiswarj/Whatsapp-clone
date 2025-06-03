@@ -1,4 +1,5 @@
 import conversationModel from "./models/conversationModel.js";
+import messageModel from './models/messageModel.js';
 
 export default function registerSocketHandlers(io) {
     console.log("Socket Handlers called");
@@ -14,13 +15,12 @@ export default function registerSocketHandlers(io) {
             console.log(`User ${userId} joins a personal room`);
         }
 
-        socket.on("join", (otherUserId) => {
-            socket.join(otherUserId);
-            console.log(`User ${userId} joined chat with ${otherUserId}`);
-        });
-
         socket.on("send-message", async (data) => {
             const { otherUserId, text } = data;
+
+            if (!otherUserId || !text) {
+                return console.warn("Missing data in send-message", data);
+            }
 
             try {
                 let conversation = await conversationModel.findOne({
@@ -38,19 +38,53 @@ export default function registerSocketHandlers(io) {
                     await conversation.populate("participants");
                 }
 
-                socket.to(otherUserId).emit("receive-message", {
+
+                // save messagge
+                const message = new messageModel({
+                    conversationId: conversation._id,
+                    senderId: userId,
+                    text
+                });
+
+                await message.save();
+
+                // Update Unread Count
+                const currentUnread = conversation.unreadCounts.get(otherUserId.toString()) || 0;
+                conversation.unreadCounts.set(otherUserId.toString(), currentUnread + 1);
+                conversation.markModified("unreadCounts"); // Notify Mongoose
+
+                // Update Last Activity
+                conversation.lastMessage = message;
+
+                // Save updated conversation
+                await conversation.save();
+
+
+                io.to(otherUserId).emit("receive-message", {
                     text,
                     conversation,
                     isNew
                 });
 
             } catch (error) {
-                console.error("Error sending message:", error);
+                console.error("Error sending message:", error, "Payload:", data);
             }
         });
 
-        socket.on("disconnect", () => {
-            console.log("Socket disconnected:", socket.id);
-        });
+        socket.on("focus-conversation", async (conversationId) => {
+            try {
+                const conversation = await conversationModel.findById(conversationId)
+                if (!conversation) {
+                    return
+                }
+                conversation.unreadCounts.set(userId, 0);
+                conversation.markModified("unreadCounts");
+                await conversation.save();
+
+            } catch (error) {
+                console.log("Focus conversation error", error)
+            }
+        })
+
     });
 }

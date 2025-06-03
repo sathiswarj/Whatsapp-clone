@@ -18,18 +18,19 @@ export const removeFromStorage = async (key: string) => {
 }
 
 export const getFromStorage = async (key: string) => {
-    try {
-        const value = await AsyncStorage.getItem(key);
-        if (value) {
-            JSON.parse(value);
-        }
-        else {
-            return null;
-        }
-    } catch (error) {
-        console.error(`Error getting data [${key}] to storage:`, error);
+  try {
+    const value = await AsyncStorage.getItem(key);
+    if (value) {
+      return JSON.parse(value);  
+    } else {
+      return null;
     }
-}
+  } catch (error) {
+    console.error(`Error getting data [${key}] from storage:`, error);
+    return null;
+  }
+};
+
 
 const USER_KEY = 'user';
 export const getUser = async () => getFromStorage(USER_KEY)

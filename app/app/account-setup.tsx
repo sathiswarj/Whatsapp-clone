@@ -77,7 +77,7 @@ export default function Account() {
 
       if (response.data?.user) {
         await AsyncStorage.setItem("user", JSON.stringify(response.data.user));
-        router.push('/chatsscreen');
+        router.push('/chats');
       } else {
         Alert.alert("Something went wrong, please try again");
       }

@@ -7,6 +7,7 @@ import { Server } from 'socket.io';
 import registerSocketHandlers from './socket.js';
 
 import userRoutes from './routes/userRoutes.js';
+import conversationRoutes from './routes/conversationRoutes.js';
 
 const app = express();
 app.use(express.json());
@@ -35,7 +36,7 @@ mongoose
     });
 
 app.use('/api/users', userRoutes);
-
+app.use('/api/conversation', conversationRoutes);
 
 const server  = app.listen(process.env.PORT, () => {
     console.log(`Server is running on http://localhost:${process.env.PORT}`);

@@ -14,8 +14,8 @@ export default function Index() {
     const redirectUser = async () => {
       try {
         const user = await getFromStorage('user');
-        if (user && pathname !== '/chatsscreen') {
-          router.replace('/chatsscreen');
+        if (user && pathname !== '/chats') {
+          router.push('/chats');
         } else {
           setCheckingAuth(false); // allow screen to render if no user
         }
@@ -38,7 +38,7 @@ export default function Index() {
 
   return (
     <View className="bg-white flex-1 items-center justify-center px-5">
-      <Image className="w-28 h-28 mb-4" source={images.logo} />
+      {/* <Image className="w-28 h-28 mb-4" source={images.logo} /> */}
       <Text className="text-2xl font-bold text-gray-900">Welcome to WhatsApp</Text>
       <Text className="text-gray-600 mt-2 text-center text-lg mb-8">
         Read Our
