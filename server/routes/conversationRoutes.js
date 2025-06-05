@@ -7,13 +7,20 @@ const router = express.Router();
 // conversation/:userId
 router.get("/:userId", async(req, res) =>{
     try {
-        const conversation = await conversationModel.find({
+        let conversation = await conversationModel.find({
             participants: req.params.userId
         })
         .populate("participants")
         .populate("lastMessage")
         .sort({updatedAt:-1})
 
+        conversation.map(conv => {
+            conv.participants.map((user) =>{
+                     user.profileImg = user.profileImg ? `${req.protocol}://${req.get('host')}${user.profileImg}`: null;
+                    return user;
+            })
+            return conv
+        })
         res.json(conversation)
     } catch (error) {
         res.status(500).json({error: error.message});
