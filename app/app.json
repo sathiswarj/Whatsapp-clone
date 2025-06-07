@@ -39,7 +39,7 @@
       "typedRoutes": true
     },
     "extra":{
-      "API_URL": "http://192.168.29.174:4000/api"
+      "API_URL": "http://192.168.29.175:4000/api"
     }
   }
 }

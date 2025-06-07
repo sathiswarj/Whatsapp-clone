@@ -6,7 +6,7 @@ import axios from 'axios';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_URL = Constants.expoConfig?.extra?.API_URL || 'http://192.168.29.174:4000/api';
+const API_URL = Constants.expoConfig?.extra?.API_URL || 'http://192.168.29.175:4000/api';
 
 export default function Account() {
   const [name, setName] = useState('');
@@ -26,8 +26,12 @@ export default function Account() {
         setName(user.name || '');
         setImage(user.profileImg || '');
       }
+      else if(!user){
+      console.error('No user data found');
+
+      }
     } catch (error) {
-      console.error('No user data found', error);
+      console.log("Error:", error)
     }
   };
 
@@ -45,49 +49,51 @@ export default function Account() {
   };
 
   const handleSave = async () => {
-    if (!name.trim()) {
-      Alert.alert("Name is required");
-      return;
+  if (!name.trim()) {
+    Alert.alert("Name is required");
+    return;
+  }
+
+  try {
+    setLoading(true);
+    const formData = new FormData();
+    formData.append('name', name);
+    formData.append('phone', phoneNumber);
+ 
+    if (image && image.startsWith('file://')) {
+      formData.append('profile', {
+        uri: image,
+        type: 'image/jpeg',
+        name: 'profile.jpg',
+      } as any);
     }
 
-    try {
-      setLoading(true);
-      const formData = new FormData();
-      formData.append('name', name);
+    let response;
 
-      if (image && image.startsWith('file://')) {
-        formData.append('profile', {
-          uri: image,
-          type: 'image/jpeg',
-          name: 'profile.jpg',
-        } as any);
-      }
-
-      let response;
-
-      if (id) {
-        response = await axios.put(`${API_URL}/users/${id}`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
-      } else {
-        response = await axios.post(`${API_URL}/users`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
-      }
-
-      if (response.data?.user) {
-        await AsyncStorage.setItem("user", JSON.stringify(response.data.user));
-        router.push('/chats');
-      } else {
-        Alert.alert("Something went wrong, please try again");
-      }
-    } catch (error) {
-      console.log('Error saving user data:', error);
-      Alert.alert("Network error");
-    } finally {
-      setLoading(false);
+    if (id) {
+      response = await axios.put(`${API_URL}/users/${id}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+    } else {
+      response = await axios.post(`${API_URL}/users`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
     }
-  };
+
+    if (response.data?.user) {
+      await AsyncStorage.setItem("user", JSON.stringify(response.data.user));
+      router.push('/chats');
+    } else {
+      Alert.alert("Something went wrong, please try again");
+    }
+  } catch (error) {
+    console.log('Error saving user data:', error);
+    Alert.alert("Network error");
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   useEffect(() => {
     if (phoneNumber) {
