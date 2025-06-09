@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Image, Text, TextInput, TouchableOpacity, View, Alert, ActivityIndicator, BackHandler } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import Constants from 'expo-constants';
-import axios from 'axios';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ApiRequestPost } from '@/network/services/ApiRequestPost';
+import {ApiRequestGet} from '@/network/services/ApiRequestGet';  
 
-const API_URL = Constants.expoConfig?.extra?.API_URL || 'http://192.168.29.175:4000/api';
-
+ 
 export default function Account() {
   const [name, setName] = useState('');
   const [image, setImage] = useState('');
@@ -16,24 +15,23 @@ export default function Account() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
-  const fetchUserData = async () => {
-    try {
-      const response = await axios.get(`${API_URL}/users/${phoneNumber}`);
-      const user = response.data?.user;
+const fetchUserData = async () => {
+  try {
+    const data = await ApiRequestGet.getUserData(phoneNumber);
+    const user = data?.user;
 
-      if (user) {
-        setId(user.id);
-        setName(user.name || '');
-        setImage(user.profileImg || '');
-      }
-      else if(!user){
+    if (user) {
+      setId(user.id);
+      setName(user.name || '');
+      setImage(user.profileImg || '');
+    } else {
       console.error('No user data found');
-
-      }
-    } catch (error) {
-      console.log("Error:", error)
     }
-  };
+  } catch (error) {
+    console.log("Error fetching user:", error);
+    Alert.alert("Failed to fetch user data");
+  }
+};
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -49,50 +47,54 @@ export default function Account() {
   };
 
   const handleSave = async () => {
-  if (!name.trim()) {
-    Alert.alert("Name is required");
-    return;
-  }
-
-  try {
-    setLoading(true);
-    const formData = new FormData();
-    formData.append('name', name);
-    formData.append('phone', phoneNumber);
- 
-    if (image && image.startsWith('file://')) {
-      formData.append('profile', {
-        uri: image,
-        type: 'image/jpeg',
-        name: 'profile.jpg',
-      } as any);
+    if (!name.trim()) {
+      Alert.alert("Name is required");
+      return;
     }
 
-    let response;
+    try {
+      setLoading(true);
+      const formData = new FormData();
+      formData.append('name', name);
+      formData.append('phone', phoneNumber);
 
-    if (id) {
-      response = await axios.put(`${API_URL}/users/${id}`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-    } else {
-      response = await axios.post(`${API_URL}/users`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-    }
+      if (image && image.startsWith('file://')) {
+        formData.append('profile', {
+          uri: image,
+          type: 'image/jpeg',
+          name: 'profile.jpg',
+        } as any);
+      }
 
-    if (response.data?.user) {
-      await AsyncStorage.setItem("user", JSON.stringify(response.data.user));
-      router.push('/chats');
-    } else {
-      Alert.alert("Something went wrong, please try again");
+      let response;
+
+      if (id) {
+        response = await ApiRequestPost.updateUserData(id, formData);
+      } else {
+        response = await ApiRequestPost.createUserData(formData);
+      }
+
+      console.log("Create response:", response);
+
+      const userData = response?.user || response?.data?.user;
+      console.log("UserData received:", userData);
+
+      if (userData) {
+        await AsyncStorage.setItem("user", JSON.stringify(userData));
+        router.push('/chats');
+      } else {
+        console.log("RAW RESPONSE:", response);
+        Alert.alert("Something went wrong. No user data returned.");
+      }
+
+
+    } catch (error) {
+      console.error('Error saving user data:', error);
+      Alert.alert("Network error or invalid response");
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.log('Error saving user data:', error);
-    Alert.alert("Network error");
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
 
   useEffect(() => {

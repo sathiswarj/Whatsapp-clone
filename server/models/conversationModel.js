@@ -1,4 +1,4 @@
-import mongoose, { Mongoose } from "mongoose";
+import mongoose from "mongoose";
 
 export const conversationSchema = new mongoose.Schema({
     participants: {

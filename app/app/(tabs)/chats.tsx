@@ -5,10 +5,9 @@ import { useRouter } from 'expo-router';
 import { getUser } from '@/util/storage';
 import { Ionicons, Feather, MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
-import axios from 'axios';
+import { ApiRequestGet } from '@/network/services/ApiRequestGet';
 
-const API_URL = Constants.expoConfig?.extra?.API_URL || 'http://192.168.29.174:4000/api';
-
+ 
 export default function ChatsScreen() {
   const [chatList, setChatList] = useState([]);
   const [user, setUser] = useState(null);
@@ -31,9 +30,9 @@ export default function ChatsScreen() {
 
         setUser(userdata);
 
-        const response = await axios.get(`${API_URL}/conversation/${userdata._id}`);
-        console.log("API response", response.data);
-        setChatList(response.data || []);
+        const response = await ApiRequestGet.getAllChats(userdata._id)
+        console.log("API response", response);
+        setChatList(response || []);
       } catch (error) {
         console.log('Failed to fetch user or chats:', error);
       }
@@ -45,7 +44,7 @@ export default function ChatsScreen() {
 
   return (
     <>
-      <Header handleLogout={handleLogout}/>
+      <Header handleLogout={handleLogout} />
       <ChatList
         activeCategory={activeCategory}
         setActiveCategory={setActiveCategory}
@@ -107,22 +106,23 @@ function CategoryTabs({ activeCategory, setActiveCategory }) {
 
 function ChatList({ activeCategory, setActiveCategory, data, user }: any) {
   const formatChat = ({ conv, currentUser }) => {
-    console.log("UnreadCounts:", conv.unreadCounts);
+    if (!currentUser) return {};
 
-    const otherUser = conv?.participants?.find(p => p._id !== currentUser._id);
+    const otherUser = conv.participants.find(p => p._id !== currentUser._id);
 
     return {
       ...conv,
-      name: otherUser?.phone,
-      message: conv?.lastMessage?.text,
-      unread: conv?.unreadCounts?.[currentUser._id] || 0,
-      createdAt: new Date(conv?.lastMessage?.createdAt).toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit"
+      name: otherUser?.name || otherUser?.phone || 'Unknown',
+      message: conv.lastMessage?.text || '',
+      unread: conv.unreadCounts?.[currentUser._id] || 0,
+      createdAt: new Date(conv.lastMessage?.createdAt).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
       }),
-      avatar: otherUser?.profileImg || "https://upload.wikimedia.org/wikipedia/commons/9/99/Sample_User_Icon.png"
+      avatar: otherUser?.profileImg || 'https://upload.wikimedia.org/wikipedia/commons/9/99/Sample_User_Icon.png',
     };
   };
+
 
 
   const formattedData = data.map(chat => formatChat({ conv: chat, currentUser: user }));
