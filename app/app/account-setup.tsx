@@ -1,37 +1,17 @@
-import React, { useState, useEffect } from 'react';
+// components/Account.tsx
+import React, { useEffect } from 'react';
 import { Image, Text, TextInput, TouchableOpacity, View, Alert, ActivityIndicator, BackHandler } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ApiRequestPost } from '@/network/services/ApiRequestPost';
-import {ApiRequestGet} from '@/network/services/ApiRequestGet';  
+import { useDispatch, useSelector } from 'react-redux';
+ import { fetchUserData, addUserData, setImage, setName } from '@/store/slice/usersSlice';
 
- 
 export default function Account() {
-  const [name, setName] = useState('');
-  const [image, setImage] = useState('');
-  const [id, setId] = useState('');
   const { phoneNumber } = useLocalSearchParams();
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
+  const dispatch = useDispatch();
 
-const fetchUserData = async () => {
-  try {
-    const data = await ApiRequestGet.getUserData(phoneNumber);
-    const user = data?.user;
-
-    if (user) {
-      setId(user.id);
-      setName(user.name || '');
-      setImage(user.profileImg || '');
-    } else {
-      console.error('No user data found');
-    }
-  } catch (error) {
-    console.log("Error fetching user:", error);
-    Alert.alert("Failed to fetch user data");
-  }
-};
+  const { name, image, id, loading } = useSelector((state: RootState) => state.user);
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -42,74 +22,33 @@ const fetchUserData = async () => {
     });
 
     if (!result.canceled && result.assets?.length > 0) {
-      setImage(result.assets[0].uri);
+      dispatch(setImage(result.assets[0].uri));
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!name.trim()) {
       Alert.alert("Name is required");
       return;
     }
 
-    try {
-      setLoading(true);
-      const formData = new FormData();
-      formData.append('name', name);
-      formData.append('phone', phoneNumber);
-
-      if (image && image.startsWith('file://')) {
-        formData.append('profile', {
-          uri: image,
-          type: 'image/jpeg',
-          name: 'profile.jpg',
-        } as any);
-      }
-
-      let response;
-
-      if (id) {
-        response = await ApiRequestPost.updateUserData(id, formData);
-      } else {
-        response = await ApiRequestPost.createUserData(formData);
-      }
-
-      console.log("Create response:", response);
-
-      const userData = response?.user || response?.data?.user;
-      console.log("UserData received:", userData);
-
-      if (userData) {
-        await AsyncStorage.setItem("user", JSON.stringify(userData));
-        router.push('/chats');
-      } else {
-        console.log("RAW RESPONSE:", response);
-        Alert.alert("Something went wrong. No user data returned.");
-      }
-
-
-    } catch (error) {
-      console.error('Error saving user data:', error);
-      Alert.alert("Network error or invalid response");
-    } finally {
-      setLoading(false);
-    }
+    dispatch(addUserData({ name, phoneNumber, image, id }));
+    router.push('/chats');
   };
-
 
   useEffect(() => {
     if (phoneNumber) {
-      fetchUserData();
+      dispatch(fetchUserData(phoneNumber));
     } else {
       Alert.alert('Phone number not found.');
     }
+
     const handleBackPress = () => {
       router.push('/');
-      return true; // Prevent default back action
-    }
+      return true;
+    };
 
-    BackHandler.addEventListener('hardwareBackPress', handleBackPress)
-
+       BackHandler.addEventListener('hardwareBackPress', handleBackPress)
   }, []);
 
   if (loading) {
@@ -140,7 +79,7 @@ const fetchUserData = async () => {
       <TextInput
         placeholder="Enter your name"
         value={name}
-        onChangeText={setName}
+        onChangeText={(text) => dispatch(setName(text))}
         className="border border-gray-300 rounded-lg p-4 text-lg w-full mb-4 text-center"
       />
 
