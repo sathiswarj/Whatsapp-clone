@@ -4,15 +4,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { getUser } from '@/util/storage';
 import { Ionicons, Feather, MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
-import Constants from 'expo-constants';
-import { ApiRequestGet } from '@/network/services/ApiRequestGet';
-
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchUserChats } from '@/store/actions/userActions';
+import type { AppDispatch, RootState } from '@/store/store.ts';
  
 export default function ChatsScreen() {
-  const [chatList, setChatList] = useState([]);
   const [user, setUser] = useState(null);
   const [activeCategory, setActiveCategory] = useState("All");
   const router = useRouter();
+  const dispatch = useDispatch<AppDispatch>();
+
+  const { chats, loading } = useSelector((state: RootState) => state.user);
 
   const handleLogout = async () => {
     await AsyncStorage.removeItem('user');
@@ -27,12 +29,8 @@ export default function ChatsScreen() {
           console.log("No valid user data");
           return;
         }
-
         setUser(userdata);
-
-        const response = await ApiRequestGet.getAllChats(userdata._id)
-        console.log("API response", response);
-        setChatList(response || []);
+        dispatch(fetchUserChats(userdata._id));
       } catch (error) {
         console.log('Failed to fetch user or chats:', error);
       }
@@ -41,15 +39,15 @@ export default function ChatsScreen() {
     fetchData();
   }, []);
 
-
   return (
     <>
       <Header handleLogout={handleLogout} />
       <ChatList
         activeCategory={activeCategory}
         setActiveCategory={setActiveCategory}
-        data={chatList}
+        data={chats}
         user={user}
+        loading={loading}
       />
     </>
   );
@@ -88,7 +86,12 @@ function SearchBar() {
   );
 }
 
-function CategoryTabs({ activeCategory, setActiveCategory }) {
+type CategoryProps = {
+  activeCategory: string;
+  setActiveCategory: (category: string) => void;
+};
+
+function CategoryTabs({ activeCategory, setActiveCategory }: CategoryProps) {
   const categories = ["All", "Unread", "Favourites", "Groups"];
 
   return (
@@ -104,11 +107,26 @@ function CategoryTabs({ activeCategory, setActiveCategory }) {
   );
 }
 
-function ChatList({ activeCategory, setActiveCategory, data, user }: any) {
-  const formatChat = ({ conv, currentUser }) => {
+
+type ChatListProps = {
+  activeCategory: string;
+  setActiveCategory: (category: string) => void;
+  data: any[]; // You can replace 'any[]' with your actual chat type if available
+  user: any;   // Replace 'any' with your actual user type if available
+  loading: boolean;
+};
+
+function ChatList({ activeCategory, setActiveCategory, data, user, loading }: ChatListProps) {
+  const formatChat = ({
+    conv,
+    currentUser,
+  }: {
+    conv: any; // Replace 'any' with your actual conversation type if available
+    currentUser: any; // Replace 'any' with your actual user type if available
+  }) => {
     if (!currentUser) return {};
 
-    const otherUser = conv.participants.find(p => p._id !== currentUser._id);
+    const otherUser = conv.participants.find((p: any) => p._id !== currentUser._id);
 
     return {
       ...conv,
@@ -123,9 +141,15 @@ function ChatList({ activeCategory, setActiveCategory, data, user }: any) {
     };
   };
 
-
-
   const formattedData = data.map(chat => formatChat({ conv: chat, currentUser: user }));
+
+  if (loading) {
+    return (
+      <View className="flex-1 items-center justify-center">
+        <Text className="text-gray-500">Loading chats...</Text>
+      </View>
+    );
+  }
 
   return (
     <View className="bg-white flex-1">
@@ -133,7 +157,7 @@ function ChatList({ activeCategory, setActiveCategory, data, user }: any) {
         <FlatList
           data={formattedData}
           contentContainerStyle={{ paddingBottom: 100 }}
-          keyExtractor={(item) => item._id.toString()}
+          keyExtractor={(item) => item._id}
           ListHeaderComponent={() => (
             <>
               <SearchBar />

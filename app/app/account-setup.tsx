@@ -4,7 +4,8 @@ import { Image, Text, TextInput, TouchableOpacity, View, Alert, ActivityIndicato
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useDispatch, useSelector } from 'react-redux';
- import { fetchUserData, addUserData, setImage, setName } from '@/store/slice/usersSlice';
+ import { fetchUserData, addUserData, setImage, setName } from '@/store/actions/userActions';
+import { RootState } from '@/store/store';
 
 export default function Account() {
   const { phoneNumber } = useLocalSearchParams();
