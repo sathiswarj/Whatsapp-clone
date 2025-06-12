@@ -1,8 +1,12 @@
 import { Tabs } from "expo-router";
-import { View, Text } from "react-native"; // ✅ Added Text here
+import { View, Text } from "react-native";  
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSelector, UseSelector } from "react-redux";
+import { RootState } from "@/store/store";
 
 export default function TabLayout() {
+
+  const { unreadCount } = useSelector((state: RootState) => state.user);
   return (
     <Tabs
       screenOptions={({ route }) => ({
@@ -52,8 +56,8 @@ export default function TabLayout() {
             <View className="w-[100px] h-[58px] items-center justify-center">
               <View className={`${focused ? "bg-green-200" : "bg-transparent"} relative px-5 py-1.5 rounded-full`}>
                 <IconComponenet size={18} name={iconName} color={iconColor} />
-                {route.name === "chats" && <View className="absolute top-0 -right-0 bg-green-600 rounded-full px-1.5">
-                  <Text className="text-white font-bold text-xs">5</Text>
+                {route.name === "chats" &&  unreadCount > 0 && <View className="absolute top-0 -right-0 bg-green-600 rounded-full px-1.5">
+                  <Text className="text-white font-bold text-xs">{unreadCount}</Text>
                 </View>}
                 {route.name === "updates" && <View className="absolute top-0 -right-0 bg-green-600 rounded-full w-2 h-2">
                 </View>}

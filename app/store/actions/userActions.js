@@ -1,90 +1,89 @@
 // store/actions/userActions.ts
+import { createAsyncThunk } from '@reduxjs/toolkit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ApiRequestGet } from '@/network/services/ApiRequestGet';
 import { ApiRequestPost } from '@/network/services/ApiRequestPost';
+import { setImage, setName } from '@/store/slice/usersSlice';
 
-import {
-  setName,
-  setImage,
-  USER_DATA_LOADING,
-  USER_DATA_SUCCESS,
-  USER_DATA_ERROR,
-  USER_ADD_LOADING,
-  USER_ADD_SUCCESS,
-  USER_ADD_ERROR,
-  USER_CHATS_LOADING,
-  USER_CHATS_SUCCESS,
-  USER_CHATS_ERROR,
-} from '@/store/slice/usersSlice'
+// Fetch user data
+export const fetchUserData = createAsyncThunk(
+  'users/fetchUserData',
+  async (phoneNumber, { rejectWithValue }) => {
+    try {
+      const response = await ApiRequestGet.getUserData(phoneNumber);
+      const user = response?.user;
 
-
-export const fetchUserData = (phoneNumber) => async (dispatch) => {
-  try {
-    dispatch(USER_DATA_LOADING());
-    const response = await ApiRequestGet.getUserData(phoneNumber);
-    const user = response?.user;
-
-    if (user) {
-      dispatch(USER_DATA_SUCCESS(user));
-    } else {
-      dispatch(USER_DATA_ERROR('No user found'));
+      if (user) {
+        return user;
+      } else {
+        return rejectWithValue('No user found');
+      }
+    } catch (error) {
+      return rejectWithValue('Failed to fetch');
     }
-  } catch (error) {
-    dispatch(USER_DATA_ERROR('Failed to fetch'));
   }
-};
+);
 
-export const addUserData = ({ name, phoneNumber, image, id }) => async (dispatch) => {
-  try {
-    dispatch(USER_ADD_LOADING());
+ export const addUserData = createAsyncThunk(
+  'users/addUserData',
+  async ({ name, phoneNumber, image, id }: { name: string; phoneNumber: string; image?: string; id?: string }, { rejectWithValue }) => {
+    try {
+      const formData = new FormData();
+      formData.append('name', name);
+      formData.append('phone', phoneNumber);
 
-    const formData = new FormData();
-    formData.append('name', name);
-    formData.append('phone', phoneNumber);
+      if (image && image.startsWith('file://')) {
+        formData.append('profile', {
+          uri: image,
+          type: 'image/jpeg',
+          name: 'profile.jpg',
+        });
+      }
 
-    if (image && image.startsWith('file://')) {
-      formData.append('profile', {
-        uri: image,
-        type: 'image/jpeg',
-        name: 'profile.jpg',
-      });
+      const response = id
+        ? await ApiRequestPost.updateUserData(id, formData)
+        : await ApiRequestPost.createUserData(formData);
+
+      const userData = response?.user || response?.data?.user;
+
+      if (userData) {
+        await AsyncStorage.setItem('user', JSON.stringify(userData));
+        return userData;
+      } else {
+        return rejectWithValue('No user data returned');
+      }
+    } catch (error) {
+      return rejectWithValue('Network error or invalid response');
     }
-
-    const response = id
-      ? await ApiRequestPost.updateUserData(id, formData)
-      : await ApiRequestPost.createUserData(formData);
-
-    const userData = response?.user || response?.data?.user;
-
-    if (userData) {
-      await AsyncStorage.setItem('user', JSON.stringify(userData));
-      dispatch(USER_ADD_SUCCESS(userData));
-    } else {
-      dispatch(USER_ADD_ERROR('No user data returned'));
-    }
-  } catch (error) {
-    dispatch(USER_ADD_ERROR('Network error or invalid response'));
   }
-};
+);
 
- 
-export const fetchUserChats = (userId) => async (dispatch) => {
-  try {
-    dispatch(USER_CHATS_LOADING());
+// Fetch user chats
+export const fetchUserChats = createAsyncThunk(
+  'users/fetchUserChats',
+  async (userId, { rejectWithValue }) => {
+    try {
+      const response = await ApiRequestGet.getAllChats(userId);
 
-    const response = await ApiRequestGet.getAllChats(userId);
+      const chats = response?.chats || (Array.isArray(response) ? response : null);
 
-    if (response?.chats) {
-      dispatch(USER_CHATS_SUCCESS(response.chats));
-    } else if (Array.isArray(response)) {
-      dispatch(USER_CHATS_SUCCESS(response));
-    } else {
-      dispatch(USER_CHATS_ERROR('Unexpected response format'));
+      if (!chats) {
+        return rejectWithValue('Unexpected response format');
+      }
+
+      // Compute total unread count for current user
+      const unreadCount = chats.reduce((total, chat) => {
+        const count = chat.unreadCounts?.[userId] || 0;
+        return total + count;
+      }, 0);
+
+      return { chats, unreadCount };
+    } catch (error) {
+      console.error('Failed to fetch chats:', error);
+      return rejectWithValue('Failed to fetch user chats');
     }
-  } catch (error) {
-    console.error('Failed to fetch chats:', error);
-    dispatch(USER_CHATS_ERROR('Failed to fetch user chats'));
   }
-};
+);
 
- export { setImage, setName };
+
+export { setImage, setName };

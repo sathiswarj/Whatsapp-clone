@@ -7,19 +7,27 @@ import { Ionicons, Feather, MaterialCommunityIcons, MaterialIcons } from '@expo/
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchUserChats } from '@/store/actions/userActions';
 import type { AppDispatch, RootState } from '@/store/store.ts';
- 
+import { getOtherUser } from '@/util/chats';
+import { connectSocket, getSocket } from '@/util/socket';
+import { updateChatList, setFocusedChatId  } from '@/store/slice/usersSlice';
+
 export default function ChatsScreen() {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState<any>(null);
   const [activeCategory, setActiveCategory] = useState("All");
+  const [filteredChats, setFilteredChats] = useState<any[]>([]);
+  const [query, setQuery] = useState("");
+  const [isSearchActive, setIsSearchActive] = useState(false);
   const router = useRouter();
   const dispatch = useDispatch<AppDispatch>();
 
-  const { chats, loading } = useSelector((state: RootState) => state.user);
+  const { chats, loading, unreadCount } = useSelector((state: RootState) => state.user);
 
   const handleLogout = async () => {
     await AsyncStorage.removeItem('user');
     router.push('/');
   };
+
+
 
   useEffect(() => {
     const fetchData = async () => {
@@ -31,23 +39,73 @@ export default function ChatsScreen() {
         }
         setUser(userdata);
         dispatch(fetchUserChats(userdata._id));
-      } catch (error) {
-        console.log('Failed to fetch user or chats:', error);
+      } catch (err) {
+        console.log('Fetch error:', err);
       }
     };
 
     fetchData();
   }, []);
 
+  useEffect(() => {
+    if (!user?._id) return;
+
+    if (!getSocket()?.connected) {
+      connectSocket(user._id, () => {
+        const socket = getSocket();
+        if (!socket) return;
+
+        socket.on("receive-message", ({ message, conversation, isNew }) => {
+          dispatch(updateChatList({ ...conversation, currentUserId: user._id }));
+        });
+      });
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (!user?._id) return;
+
+    let filtered = Array.isArray(chats) ? [...chats] : [];
+
+    if (activeCategory === "Unread") {
+      filtered = filtered.filter(chat => {
+        const unreadTotal = Object.values(chat.unreadCounts || {}).reduce((acc: number, val: number) => acc + val, 0);
+        return unreadTotal > 0;
+      });
+    }
+
+    if (query.trim()) {
+      filtered = filtered.filter(chat =>
+        getOtherUser(chat, user._id)?.name.toLowerCase().includes(query.toLowerCase())
+      );
+    }
+
+    setFilteredChats(filtered);
+  }, [chats, activeCategory, user, query]);
+
+  const onCancel = () => {
+    setIsSearchActive(false);
+    setQuery("");
+  };
+
+  const onSearch = (text: string) => {
+    setQuery(text);
+  };
+  
+
   return (
     <>
-      <Header handleLogout={handleLogout} />
+      {isSearchActive
+        ? <ActiveSearchBar onCancel={onCancel} onSearch={onSearch} />
+        : <Header handleLogout={handleLogout} />}
       <ChatList
         activeCategory={activeCategory}
         setActiveCategory={setActiveCategory}
-        data={chats}
+        data={filteredChats}
         user={user}
         loading={loading}
+        setIsSearchActive={setIsSearchActive}
+        isSearchActive={isSearchActive}
       />
     </>
   );
@@ -59,7 +117,7 @@ type HeaderProps = {
 
 function Header({ handleLogout }: HeaderProps) {
   return (
-    <View className="flex-row justify-between items-center bg-white pt-10 px-4">
+    <View className="flex-row justify-between items-center bg-white pt-16 px-4">
       <Text className="text-2xl font-bold text-green-700">ChatApp</Text>
       <View className="flex-row gap-5 mb-4">
         <TouchableOpacity>
@@ -73,16 +131,22 @@ function Header({ handleLogout }: HeaderProps) {
   );
 }
 
-function SearchBar() {
+type SearchBarProps = {
+  setIsSearchActive: (active: boolean) => void;
+  isSearchActive: boolean;
+};
+
+function SearchBar({ setIsSearchActive, isSearchActive }: SearchBarProps) {
+  if (isSearchActive) return null;
+
   return (
-    <View className="mx-4 mb-3 flex-row items-center bg-gray-200 rounded-full px-4 py-2">
+    <TouchableOpacity
+      className="mx-4 mb-3 flex-row items-center bg-gray-200 rounded-full px-4 py-2"
+      onPress={() => setIsSearchActive(true)}
+    >
       <Ionicons name="search" size={20} color="gray" />
-      <TextInput
-        placeholder="Ask Meta AI or Search"
-        className="ml-2 flex-1 text-sm text-gray-800"
-        placeholderTextColor="gray"
-      />
-    </View>
+      <Text className="ml-2 text-sm text-gray-800">Ask Meta AI or Search</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -107,36 +171,40 @@ function CategoryTabs({ activeCategory, setActiveCategory }: CategoryProps) {
   );
 }
 
-
 type ChatListProps = {
   activeCategory: string;
   setActiveCategory: (category: string) => void;
-  data: any[]; // You can replace 'any[]' with your actual chat type if available
-  user: any;   // Replace 'any' with your actual user type if available
+  data: any[];
+  user: any;
   loading: boolean;
+  setIsSearchActive: (active: boolean) => void;
+  isSearchActive: boolean;
 };
 
-function ChatList({ activeCategory, setActiveCategory, data, user, loading }: ChatListProps) {
-  const formatChat = ({
-    conv,
-    currentUser,
-  }: {
-    conv: any; // Replace 'any' with your actual conversation type if available
-    currentUser: any; // Replace 'any' with your actual user type if available
-  }) => {
-    if (!currentUser) return {};
+function ChatList({ activeCategory, setActiveCategory, data, user, loading, setIsSearchActive, isSearchActive }: ChatListProps) {
+  const dispatch = useDispatch();
 
-    const otherUser = conv.participants.find((p: any) => p._id !== currentUser._id);
+const focusConversation = (chat: any, focused: boolean) => {
+  const socket = getSocket();
+  if (!socket || !user._id) return;
+  if (focused) {
+    socket.emit("focus-conversation", { chatId: chat._id});
+      dispatch(setFocusedChatId(chat._id));
 
+  }
+};
+
+
+  const formatChat = ({ conv, currentUser }: { conv: any, currentUser: any }) => {
+    const otherUser = getOtherUser(conv, currentUser._id);
     return {
       ...conv,
       name: otherUser?.name || otherUser?.phone || 'Unknown',
       message: conv.lastMessage?.text || '',
       unread: conv.unreadCounts?.[currentUser._id] || 0,
-      createdAt: new Date(conv.lastMessage?.createdAt).toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
+      createdAt: conv.lastMessage?.createdAt
+        ? new Date(conv.lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : '',
       avatar: otherUser?.profileImg || 'https://upload.wikimedia.org/wikipedia/commons/9/99/Sample_User_Icon.png',
     };
   };
@@ -160,11 +228,8 @@ function ChatList({ activeCategory, setActiveCategory, data, user, loading }: Ch
           keyExtractor={(item) => item._id}
           ListHeaderComponent={() => (
             <>
-              <SearchBar />
-              <CategoryTabs
-                activeCategory={activeCategory}
-                setActiveCategory={setActiveCategory}
-              />
+              <SearchBar isSearchActive={isSearchActive} setIsSearchActive={setIsSearchActive} />
+              <CategoryTabs activeCategory={activeCategory} setActiveCategory={setActiveCategory} />
             </>
           )}
           ListFooterComponent={() => (
@@ -176,7 +241,8 @@ function ChatList({ activeCategory, setActiveCategory, data, user, loading }: Ch
             </View>
           )}
           renderItem={({ item }) => (
-            <TouchableOpacity className="flex-row items-center px-4 py-3">
+            <TouchableOpacity className="flex-row items-center px-4 py-3" onPress={() => focusConversation(item, true)}
+ >
               <Image className="h-12 w-12 rounded-full" source={{ uri: item.avatar }} />
               <View className="flex-1 ml-4">
                 <View className="flex-row justify-between">
@@ -215,6 +281,29 @@ function EmptyChat() {
       <TouchableOpacity className="absolute bottom-6 right-6 bg-green-500 rounded-full p-4">
         <MaterialIcons name="message" size={28} color="white" />
       </TouchableOpacity>
+    </View>
+  );
+}
+
+type ActiveSearchBarProps = {
+  onSearch: (text: string) => void;
+  onCancel: () => void;
+};
+
+function ActiveSearchBar({ onSearch, onCancel }: ActiveSearchBarProps) {
+  return (
+    <View className='bg-white'>
+      <View className='flex-row items-center bg-gray-200 rounded-full px-4 mx-4 py-2 my-3 mt-12'>
+        <TouchableOpacity onPress={onCancel}>
+          <Ionicons name='arrow-back' size={24} color="gray" />
+        </TouchableOpacity>
+        <TextInput
+          onChangeText={onSearch}
+          autoFocus
+          placeholder='Search...'
+          className='ml-3 flex-1 text-base text-black'
+        />
+      </View>
     </View>
   );
 }
