@@ -1,4 +1,4 @@
-import {ApiPostServiceWrapper , ApiPatchServiceWrapper } from "../wrapperService";
+import { ApiPostServiceWrapper, ApiPatchServiceWrapper, ApiDeleteServiceWrapper } from "../wrapperService";
 import { API_ENDPOINT } from "./ApiEndPoint";
 
 export const ApiRequestPost = {
@@ -20,6 +20,17 @@ export const ApiRequestPost = {
         url: `${API_ENDPOINT.basePath}users/${id}`,
         headers: {},
         body: formData,
+      })
+        .then(resolve)
+        .catch(reject);
+    });
+  },
+  deleteChatData: (id) => {
+    return new Promise((resolve, reject) => {
+      ApiPostServiceWrapper({
+        url: `${API_ENDPOINT.basePath}conversation/delete`,
+        headers: {},
+        body: JSON.stringify({ ids }),
       })
         .then(resolve)
         .catch(reject);

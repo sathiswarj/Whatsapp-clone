@@ -64,3 +64,25 @@ export const ApiPatchServiceWrapper = async ({ url = "", headers = {}, body = nu
     return null;
   }
 };
+
+export const ApiDeleteServiceWrapper = async ({ url = "", headers = {}, body = null }) => {
+  try {
+    const res = await fetch(url, {
+      method: "DELETE",  
+      headers: {
+        
+        "X-Frame-Options": "DENY",
+        ...headers,
+      },
+      body: body, // pass FormData directly, or JSON string if not FormData
+    });
+    if (!res.ok) {
+      console.error(`HTTP error! Status: ${res.status}`);
+      return null;
+    }
+    return await res.json();
+  } catch (error) {
+    console.log("Fetch error:", error);
+    return null;
+  }
+};

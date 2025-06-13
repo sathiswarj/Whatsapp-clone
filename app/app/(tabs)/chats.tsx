@@ -9,12 +9,16 @@ import { fetchUserChats } from '@/store/actions/userActions';
 import type { AppDispatch, RootState } from '@/store/store.ts';
 import { getOtherUser } from '@/util/chats';
 import { connectSocket, getSocket } from '@/util/socket';
-import { updateChatList, setFocusedChatId  } from '@/store/slice/usersSlice';
+import { updateChatList, setFocusedChatId, clearUnreadCount } from '@/store/slice/usersSlice';
+import { ApiRequestPost } from '@/network/services/ApiRequestPost';
+import { Alert } from 'react-native';
 
 export default function ChatsScreen() {
   const [user, setUser] = useState<any>(null);
   const [activeCategory, setActiveCategory] = useState("All");
   const [filteredChats, setFilteredChats] = useState<any[]>([]);
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedChats, setSelectedChats] = useState<any[]>([])
   const [query, setQuery] = useState("");
   const [isSearchActive, setIsSearchActive] = useState(false);
   const router = useRouter();
@@ -74,11 +78,14 @@ export default function ChatsScreen() {
       });
     }
 
-    if (query.trim()) {
-      filtered = filtered.filter(chat =>
-        getOtherUser(chat, user._id)?.name.toLowerCase().includes(query.toLowerCase())
-      );
-    }
+   if (query.trim()) {
+  filtered = filtered.filter(chat => {
+    const other = getOtherUser(chat, user._id);
+    const name = other?.name || other?.phone || "";
+    return name.toLowerCase().includes(query.toLowerCase());
+  });
+}
+
 
     setFilteredChats(filtered);
   }, [chats, activeCategory, user, query]);
@@ -91,13 +98,25 @@ export default function ChatsScreen() {
   const onSearch = (text: string) => {
     setQuery(text);
   };
-  
+
 
   return (
     <>
-      {isSearchActive
-        ? <ActiveSearchBar onCancel={onCancel} onSearch={onSearch} />
-        : <Header handleLogout={handleLogout} />}
+
+      {selectionMode ? (
+        <ChatActionBar
+          selectionMode={selectionMode}
+          setSelectionMode={setSelectionMode}
+          selectedChats={selectedChats}
+          setSelectedChats={setSelectedChats}
+        />
+
+      ) : isSearchActive ? (
+        <ActiveSearchBar onCancel={onCancel} onSearch={onSearch} />
+      ) : (
+        <Header handleLogout={handleLogout} />
+      )}
+
       <ChatList
         activeCategory={activeCategory}
         setActiveCategory={setActiveCategory}
@@ -106,6 +125,10 @@ export default function ChatsScreen() {
         loading={loading}
         setIsSearchActive={setIsSearchActive}
         isSearchActive={isSearchActive}
+        selectionMode={selectionMode}
+        setSelectionMode={setSelectionMode}
+        selectedChats={selectedChats}
+        setSelectedChats={setSelectedChats}
       />
     </>
   );
@@ -179,23 +202,37 @@ type ChatListProps = {
   loading: boolean;
   setIsSearchActive: (active: boolean) => void;
   isSearchActive: boolean;
+  selectionMode: boolean;
+  setSelectionMode: (active: boolean) => void;
+  selectedChats: any[];
+  setSelectedChats: (chats: any[]) => void;
 };
 
-function ChatList({ activeCategory, setActiveCategory, data, user, loading, setIsSearchActive, isSearchActive }: ChatListProps) {
+function ChatList({ activeCategory, setActiveCategory, data, user, loading, setIsSearchActive, isSearchActive, selectionMode, setSelectionMode, selectedChats, setSelectedChats }: ChatListProps) {
   const dispatch = useDispatch();
 
-const focusConversation = (chat: any, focused: boolean) => {
-  const socket = getSocket();
-  if (!socket || !user._id) return;
-  if (focused) {
-    socket.emit("focus-conversation", { chatId: chat._id});
+
+  const focusConversation = (chat: any, focused: boolean) => {
+    const socket = getSocket();
+    if (!socket || !user._id) return;
+
+    if (focused) {
+      socket.emit("focus-conversation", chat._id); // emit just chatId
+
+      // 🔥 Immediately update Redux to reset unread count for this chat
+      dispatch(clearUnreadCount({ chatId: chat._id, userId: user._id }));
+
+      // Set focused chat ID
       dispatch(setFocusedChatId(chat._id));
 
-  }
-};
+      // 🔁 Optionally: navigate to the chat screen if applicable
+      // router.push(`/chat/${chat._id}`);
+    }
+  };
 
 
   const formatChat = ({ conv, currentUser }: { conv: any, currentUser: any }) => {
+
     const otherUser = getOtherUser(conv, currentUser._id);
     return {
       ...conv,
@@ -211,6 +248,37 @@ const focusConversation = (chat: any, focused: boolean) => {
 
   const formattedData = data.map(chat => formatChat({ conv: chat, currentUser: user }));
 
+  const toggleChatSelection = (chat) => {
+  setSelectedChats(prev => {
+    const exists = prev.find(c => c._id === chat._id);
+    return exists ? prev.filter(c => c._id !== chat._id) : [...prev, chat];
+  });
+};
+
+function selectChat(chat) {
+  if (!selectionMode) setSelectionMode(true);
+  toggleChatSelection(chat);
+}
+
+function tapChat(chat) {
+  if (selectionMode) {
+    toggleChatSelection(chat);
+  } else {
+    focusConversation(chat, true);
+  }
+}
+
+const isChatSelected = (chat: any) => {
+  return selectedChats.some(selected => selected._id === chat._id);
+};
+
+
+  useEffect(() => {
+    if (!(selectedChats.length > 0)) {
+      setSelectionMode(false)
+    }
+  }, [selectedChats])
+
   if (loading) {
     return (
       <View className="flex-1 items-center justify-center">
@@ -218,6 +286,8 @@ const focusConversation = (chat: any, focused: boolean) => {
       </View>
     );
   }
+
+
 
   return (
     <View className="bg-white flex-1">
@@ -241,8 +311,11 @@ const focusConversation = (chat: any, focused: boolean) => {
             </View>
           )}
           renderItem={({ item }) => (
-            <TouchableOpacity className="flex-row items-center px-4 py-3" onPress={() => focusConversation(item, true)}
- >
+            <TouchableOpacity className={`flex-row items-center px-4 py-3 ${selectionMode && isChatSelected(item) ? 'bg-green-200' : ''}`}
+
+              onLongPress={() => selectChat(item)}
+              onPress={() => tapChat(item)}
+            >
               <Image className="h-12 w-12 rounded-full" source={{ uri: item.avatar }} />
               <View className="flex-1 ml-4">
                 <View className="flex-row justify-between">
@@ -303,6 +376,66 @@ function ActiveSearchBar({ onSearch, onCancel }: ActiveSearchBarProps) {
           placeholder='Search...'
           className='ml-3 flex-1 text-base text-black'
         />
+      </View>
+    </View>
+  );
+}
+
+
+function ChatActionBar({
+  selectionMode,
+  setSelectionMode,
+  selectedChats,
+  setSelectedChats,
+}: {
+  selectionMode: boolean;
+  setSelectionMode: (active: boolean) => void;
+  selectedChats: any[];
+  setSelectedChats: (chats: any[]) => void;
+}) {
+ 
+const handleDelete = () => {
+  Alert.alert(
+    "Confirm Deletion",
+    "Are you sure you want to delete the selected chats?",
+    [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            const ids = selectedChats.map(chat => chat._id);
+            const response = await ApiRequestPost.deleteChatData(ids);
+            if (response) {
+              setSelectedChats([]);
+              setSelectionMode(false);
+            }
+          } catch (error) {
+            console.log("Error:", error);
+          }
+        }
+      }
+    ]
+  );
+};
+
+
+  return (
+    <View className='bg-white'>
+      <View className='flex-row justify-between p-3 bg-gray-200 mb-4'>
+        <TouchableOpacity onPress={() => setSelectionMode(false)}>
+          <Ionicons name='arrow-back' size={24} />
+        </TouchableOpacity>
+
+        <View className='flex-row gap-3'>
+          <TouchableOpacity onPress={handleDelete}>
+            <Ionicons name='trash-outline' size={24} />
+          </TouchableOpacity>
+          <TouchableOpacity>
+            <Feather size={24} name='more-vertical' />
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
